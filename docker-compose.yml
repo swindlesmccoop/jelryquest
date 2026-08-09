@@ -10,6 +10,8 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       # Avoid Magic DNS in the sidecar namespace (often breaks resolution before TS is up)
       TS_ACCEPT_DNS: "false"
+      # Kernel TUN required: userspace mode does not route arbitrary app TCP through exit node.
+      TS_USERSPACE: "false"
       # TS_EXIT_NODE must be the VPS 100.x Tailscale IP (short names fail at boot).
       TS_EXTRA_ARGS: --exit-node=${TS_EXIT_NODE} --exit-node-allow-lan-access
     cap_add:

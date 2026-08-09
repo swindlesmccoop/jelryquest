@@ -31,16 +31,38 @@ def parse_ip_response(text: str, url: str) -> str:
     return stripped.split()[0]
 
 
+DEFAULT_EGRESS_CHECK_URLS = (
+    "https://api.ipify.org",
+    "https://ifconfig.me/ip",
+    "https://icanhazip.com",
+)
+
+
 async def check_egress(settings: Settings, client: httpx.AsyncClient | None = None) -> EgressResult:
     expected = settings.expected_egress_ip.strip()
     owns_client = client is None
     if owns_client:
         client = httpx.AsyncClient(timeout=30.0)
 
+    urls = [settings.egress_check_url.strip()]
+    for url in DEFAULT_EGRESS_CHECK_URLS:
+        if url not in urls:
+            urls.append(url)
+
+    last_error: Exception | None = None
+    observed: str | None = None
     try:
-        response = await client.get(settings.egress_check_url)
-        response.raise_for_status()
-        observed = parse_ip_response(response.text, settings.egress_check_url)
+        for url in urls:
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                observed = parse_ip_response(response.text, url)
+                break
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Egress probe failed via %s: %s", url, exc)
+        else:
+            raise last_error or RuntimeError("no egress check URLs configured")
     except Exception as exc:
         msg = f"Egress check failed: {exc}"
         if "name resolution" in str(exc).lower() or getattr(exc, "errno", None) == -3:

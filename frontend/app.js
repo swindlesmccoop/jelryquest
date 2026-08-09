@@ -264,10 +264,20 @@ async function refreshHealth() {
     if (h.egress_ok) {
       el.textContent = `Egress OK — ${h.observed_ip}`;
       el.className = "health ok";
-    } else {
-      el.textContent = `Egress mismatch — observed ${h.observed_ip ?? "?"} expected ${h.expected_ip}`;
-      el.className = "health bad";
+      return;
     }
+    if (h.message === "Egress check in progress") {
+      el.textContent = "Checking egress…";
+      el.className = "health";
+      setTimeout(refreshHealth, 3000);
+      return;
+    }
+    if (h.observed_ip == null) {
+      el.textContent = `Egress check failed — ${h.message ?? "unknown error"} (expected ${h.expected_ip})`;
+    } else {
+      el.textContent = `Egress mismatch — observed ${h.observed_ip} expected ${h.expected_ip}`;
+    }
+    el.className = "health bad";
   } catch (e) {
     el.textContent = `Health check failed: ${e.message}`;
     el.className = "health bad";

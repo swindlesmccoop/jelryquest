@@ -81,11 +81,13 @@ async def health() -> HealthResponse:
             egress_ok=False,
             observed_ip=None,
             expected_ip=settings.expected_egress_ip,
+            message="Egress check pending",
         )
     return HealthResponse(
         egress_ok=egress_state.ok,
         observed_ip=egress_state.observed_ip,
         expected_ip=egress_state.expected_ip,
+        message=egress_state.message,
     )
 
 

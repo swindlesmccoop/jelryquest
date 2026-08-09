@@ -75,3 +75,4 @@ class HealthResponse(BaseModel):
     egress_ok: bool
     observed_ip: str | None
     expected_ip: str
+    message: str | None = None
