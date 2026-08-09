@@ -11,6 +11,7 @@ import httpx
 
 from backend.config import Settings
 from backend.models import DownloadJob, DownloadState, StreamItem
+from backend.rd_urls import is_realdebrid_url
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,10 @@ class DownloadManager:
         rd_client: Any | None = None,
         content_type: Literal["movie", "series"] = "movie",
     ) -> DownloadJob:
-        download_url = stream.ddl or stream.url
-        if not download_url:
+        direct_url, rd_link = self._resolve_enqueue_urls(stream)
+        if not direct_url and not rd_link and not stream.info_hash:
             raise ValueError(
-                "Selected stream has no direct download URL. "
+                "Selected stream has no direct download URL or Real Debrid link. "
                 "Torrentio may need RD in manifest or magnet resolution failed."
             )
 
@@ -88,23 +89,39 @@ class DownloadManager:
         asyncio.create_task(
             self._run(
                 job,
-                download_url,
+                direct_url,
                 display_title,
                 download_dir,
-                stream.rd_link,
+                rd_link,
                 rd_client,
+                stream,
             )
         )
         return job
 
+    def _resolve_enqueue_urls(self, stream: StreamItem) -> tuple[str | None, str | None]:
+        rd_link = stream.rd_link
+        if stream.url and is_realdebrid_url(stream.url):
+            rd_link = stream.url.strip()
+
+        direct_url: str | None = None
+        if stream.ddl and not is_realdebrid_url(stream.ddl):
+            direct_url = stream.ddl
+        elif stream.url and not is_realdebrid_url(stream.url):
+            direct_url = stream.url.strip()
+
+        return direct_url, rd_link
+
     async def enqueue_direct(
         self,
-        download_url: str,
+        direct_url: str | None,
         title: str,
         content_type: Literal["movie", "series"] = "movie",
         rd_link: str | None = None,
         rd_client: Any | None = None,
     ) -> DownloadJob:
+        if not direct_url and not rd_link:
+            raise ValueError("No download URL or Real Debrid link")
         job_id = str(uuid.uuid4())[:8]
         download_dir = self.settings.download_path_for(content_type)
         job = DownloadJob(
@@ -118,7 +135,7 @@ class DownloadManager:
         asyncio.create_task(
             self._run(
                 job,
-                download_url,
+                direct_url,
                 title,
                 download_dir,
                 rd_link,
@@ -130,11 +147,12 @@ class DownloadManager:
     async def _run(
         self,
         job: DownloadJob,
-        url: str,
+        direct_url: str | None,
         title: str,
         download_dir: str,
         rd_link: str | None = None,
         rd_client: Any | None = None,
+        stream: StreamItem | None = None,
     ) -> None:
         async with self._lock:
             while self._active >= self.settings.max_active_downloads:
@@ -144,12 +162,26 @@ class DownloadManager:
         job.state = DownloadState.downloading
         Path(download_dir).mkdir(parents=True, exist_ok=True)
 
+        active_rd_link = rd_link
         try:
+            url = direct_url
+            if not active_rd_link and stream and stream.info_hash and rd_client:
+                resolved = await rd_client.resolve_magnet_to_rd_link(
+                    stream.info_hash,
+                    stream.file_idx,
+                )
+                active_rd_link = resolved.rd_link
+                if resolved.filename and not title:
+                    title = resolved.filename
+            if active_rd_link and rd_client:
+                url = await rd_client.resolve_download_url(active_rd_link)
+            if not url:
+                raise ValueError("No download URL or Real Debrid link")
             await self._download_file(job, url, title, download_dir)
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code in (403, 429) and rd_link and rd_client:
+            if exc.response.status_code in (403, 429) and active_rd_link and rd_client:
                 try:
-                    new_url = await rd_client.unrestrict_link(rd_link)
+                    new_url = await rd_client.resolve_download_url(active_rd_link)
                     await self._download_file(job, new_url, title, download_dir)
                     return
                 except Exception:

@@ -23,6 +23,7 @@ class ResolvedLinks(BaseModel):
     magnet: str | None = None
     rd_link: str | None = None
     ddl: str | None = None
+    filename: str | None = None
 
 
 class StreamItem(BaseModel):

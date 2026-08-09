@@ -224,10 +224,10 @@ async def download_pasted_link(body: PasteDownloadRequest) -> dict:
             "Real Debrid API token required for magnet and real-debrid.com links",
         )
     try:
-        ddl, rd_link, suggested_title = await resolve_pasted_link(body.link, rd_client)
+        direct_url, rd_link, suggested_title = await resolve_pasted_link(body.link, rd_client)
         title = (body.title or suggested_title or "download").strip()
         job = await downloads.enqueue_direct(
-            ddl,
+            direct_url,
             title,
             body.content_type,
             rd_link,

@@ -1,8 +1,6 @@
 from typing import Any
 from urllib.parse import quote
 
-from urllib.parse import quote
-
 import httpx
 
 from backend.config import Settings
@@ -132,15 +130,21 @@ class StremioClient:
 
     async def _enrich_fast_path(self, items: list[StreamItem]) -> list[StreamItem]:
         from backend.real_debrid import build_magnet
+        from backend.rd_urls import is_realdebrid_url
 
         enriched: list[StreamItem] = []
         for item in items:
             magnet = build_magnet(item.info_hash) if item.info_hash else None
+            rd_link = item.url.strip() if item.url and is_realdebrid_url(item.url) else None
+            ddl = None
+            if item.url and not is_realdebrid_url(item.url):
+                ddl = item.url
             enriched.append(
                 item.model_copy(
                     update={
                         "magnet": magnet,
-                        "ddl": item.url,
+                        "rd_link": rd_link,
+                        "ddl": ddl,
                     }
                 )
             )

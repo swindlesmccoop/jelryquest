@@ -178,7 +178,7 @@ function showStreamsList(streams, titleLabel) {
       li.className = "card stream-item";
       const label = stream.name || `Stream ${stream.index + 1}`;
       const desc = stream.title || "No description";
-      const hasDdl = !!stream.ddl;
+      const hasDdl = !!stream.ddl || !!stream.rd_link || !!stream.infoHash || !!stream.magnet;
       li.innerHTML = `
         <div><strong>${escapeHtml(label)}</strong></div>
         <div class="stream-title meta">${escapeHtml(desc)}</div>

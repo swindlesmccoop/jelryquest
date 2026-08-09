@@ -8,6 +8,7 @@ import httpx
 
 from backend.config import Settings
 from backend.models import ResolvedLinks, StreamItem
+from backend.rd_urls import is_realdebrid_url, needs_unrestrict
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,36 @@ def build_magnet(info_hash: str) -> str:
     if hash_clean.startswith("magnet:"):
         return info_hash.strip()
     return f"magnet:?xt=urn:btih:{hash_clean}"
+
+
+def _pick_rd_link_and_filename(
+    info: dict[str, Any],
+    file_idx: int | None,
+) -> tuple[str, str | None]:
+    links = info.get("links") or []
+    if not links:
+        raise ValueError("Real Debrid torrent has no links after download")
+
+    files = info.get("files") or []
+    filename: str | None = None
+    link_index = 0
+
+    if file_idx is not None and 0 <= file_idx < len(links):
+        link_index = file_idx
+    if file_idx is not None and files and 0 <= file_idx < len(files):
+        path = (files[file_idx].get("path") or "").strip()
+        if path:
+            filename = path.rsplit("/", 1)[-1]
+
+    rd_link = (links[link_index] or "").strip()
+    if not rd_link:
+        rd_link = (links[0] or "").strip()
+    if not filename and files:
+        path = (files[link_index].get("path") or info.get("filename") or "").strip()
+        if path:
+            filename = path.rsplit("/", 1)[-1]
+
+    return rd_link, filename
 
 
 class RealDebridClient:
@@ -120,6 +151,15 @@ class RealDebridClient:
             raise ValueError("Real Debrid unrestrict did not return a download URL")
         return download_url
 
+    async def resolve_download_url(self, link: str) -> str:
+        """Resolve panel or CDN RD URL to a fresh DDL on current egress IP."""
+        raw = (link or "").strip()
+        if not raw:
+            raise ValueError("Empty Real Debrid link")
+        if needs_unrestrict(raw):
+            return await self.unrestrict_link(raw)
+        return raw
+
     async def wait_for_downloaded(
         self,
         torrent_id: str,
@@ -136,11 +176,14 @@ class RealDebridClient:
             await asyncio.sleep(POLL_INTERVAL_SEC)
         raise TimeoutError("Real Debrid torrent did not finish within timeout")
 
-    async def resolve_magnet_to_ddl(
+    async def resolve_magnet_to_rd_link(
         self,
         info_hash: str,
         file_idx: int | None = None,
+        *,
+        delete_after: bool = False,
     ) -> ResolvedLinks:
+        """Add magnet on RD, wait for RD cloud copy, return panel link (not CDN DDL)."""
         magnet = build_magnet(info_hash)
         torrent_id = await self.add_magnet(magnet)
         try:
@@ -149,51 +192,39 @@ class RealDebridClient:
             selection = self._file_selection(files, file_idx)
             await self.select_files(torrent_id, selection)
             info = await self.wait_for_downloaded(torrent_id)
-            links = info.get("links") or []
-            if not links:
-                raise ValueError("Real Debrid torrent has no links after download")
-
-            if selection == "all" and file_idx is not None and file_idx < len(links):
-                rd_link = links[file_idx]
-            else:
-                rd_link = links[0]
-            ddl = await self.unrestrict_link(rd_link)
-            return ResolvedLinks(magnet=magnet, rd_link=rd_link, ddl=ddl)
+            rd_link, filename = _pick_rd_link_and_filename(info, file_idx)
+            return ResolvedLinks(
+                magnet=magnet,
+                rd_link=rd_link,
+                ddl=None,
+                filename=filename,
+            )
         finally:
-            await self.delete_torrent(torrent_id)
+            if delete_after:
+                await self.delete_torrent(torrent_id)
+
+    async def resolve_magnet_to_ddl(
+        self,
+        info_hash: str,
+        file_idx: int | None = None,
+    ) -> ResolvedLinks:
+        resolved = await self.resolve_magnet_to_rd_link(info_hash, file_idx)
+        ddl = await self.unrestrict_link(resolved.rd_link)
+        return resolved.model_copy(update={"ddl": ddl})
 
     async def enrich_stream(self, stream: StreamItem) -> StreamItem:
-        info_hash = stream.info_hash
-        magnet = build_magnet(info_hash) if info_hash else None
+        magnet = build_magnet(stream.info_hash) if stream.info_hash else None
+        rd_link: str | None = None
+        if stream.url and is_realdebrid_url(stream.url):
+            rd_link = stream.url.strip()
 
-        if stream.url:
-            return stream.model_copy(
-                update={
-                    "magnet": magnet,
-                    "ddl": stream.url,
-                }
-            )
-
-        if not info_hash:
-            return stream.model_copy(update={"magnet": magnet})
-
-        try:
-            resolved = await self.resolve_magnet_to_ddl(info_hash, stream.file_idx)
-            return stream.model_copy(
-                update={
-                    "magnet": resolved.magnet,
-                    "rd_link": resolved.rd_link,
-                    "ddl": resolved.ddl,
-                }
-            )
-        except Exception as exc:
-            logger.warning("RD resolve failed for stream %s: %s", stream.index, exc)
-            return stream.model_copy(
-                update={
-                    "magnet": magnet,
-                    "resolve_error": str(exc),
-                }
-            )
+        return stream.model_copy(
+            update={
+                "magnet": magnet,
+                "rd_link": rd_link,
+                "ddl": None,
+            }
+        )
 
     async def enrich_streams(self, streams: list[StreamItem]) -> list[StreamItem]:
         tasks = [self.enrich_stream(s) for s in streams]
