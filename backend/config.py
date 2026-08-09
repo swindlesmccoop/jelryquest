@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     web_port: int = 8080
     cinemeta_base: str = "https://v3-cinemeta.strem.io"
+    # Fetches Torrentio/Cinemeta via home WAN (addon-bridge); RD/downloads use VPS egress.
+    addon_bridge_url: str = "http://addon-bridge:8090"
 
     @property
     def addon_base(self) -> str:

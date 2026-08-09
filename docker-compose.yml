@@ -39,6 +39,15 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Torrentio blocks VPS/datacenter IPs; this sidecar fetches addons via home WAN.
+  addon-bridge:
+    build:
+      context: .
+      dockerfile: addon_bridge/Dockerfile
+    networks:
+      default:
+    restart: unless-stopped
+
   app:
     build: .
     network_mode: service:tailscale
@@ -58,6 +67,8 @@ services:
       WEB_PORT: ${WEB_PORT:-8080}
     depends_on:
       tailscale:
+        condition: service_started
+      addon-bridge:
         condition: service_started
     restart: unless-stopped
 

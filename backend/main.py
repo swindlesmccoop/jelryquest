@@ -11,10 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from backend.config import Settings, get_settings
 from backend.downloader import DownloadManager
 from backend.egress_check import EgressResult, verify_egress_on_startup
+from backend.link_import import classify_pasted_link, resolve_pasted_link
 from backend.models import (
     DownloadRequest,
     EpisodeItem,
     HealthResponse,
+    PasteDownloadRequest,
     SearchResult,
     StreamItem,
 )
@@ -200,6 +202,39 @@ async def start_download(body: DownloadRequest) -> dict:
             rd_client,
             body.content_type,
         )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    return {"job_id": job.id, "state": job.state}
+
+
+@app.post("/api/download/link", response_model=dict)
+async def download_pasted_link(body: PasteDownloadRequest) -> dict:
+    if not egress_state or not egress_state.ok:
+        raise HTTPException(503, "Egress check failed; downloads unavailable")
+    assert downloads is not None and rd_client is not None
+    settings = get_settings()
+    try:
+        kind = classify_pasted_link(body.link)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if kind in ("magnet", "rd") and not settings.resolved_rd_token:
+        raise HTTPException(
+            400,
+            "Real Debrid API token required for magnet and real-debrid.com links",
+        )
+    try:
+        ddl, rd_link, suggested_title = await resolve_pasted_link(body.link, rd_client)
+        title = (body.title or suggested_title or "download").strip()
+        job = await downloads.enqueue_direct(
+            ddl,
+            title,
+            body.content_type,
+            rd_link,
+            rd_client,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Link resolve failed: {exc}") from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

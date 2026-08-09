@@ -75,6 +75,31 @@ h1 {
   gap: 0.5rem;
 }
 
+.paste-panel textarea,
+.paste-panel input[type="text"] {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #2a3a52;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.paste-panel textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+
+.paste-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 #query {
   flex: 1;
   padding: 0.65rem 0.85rem;

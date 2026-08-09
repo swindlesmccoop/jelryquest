@@ -331,6 +331,29 @@ $("search-form").addEventListener("submit", async (e) => {
   }
 });
 
+$("paste-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const link = $("paste-link").value.trim();
+  if (!link) return;
+  const title = $("paste-title").value.trim();
+  try {
+    await api("/api/download/link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        link,
+        title: title || null,
+        content_type: searchMode === "series" ? "series" : "movie",
+      }),
+    });
+    $("paste-link").value = "";
+    $("paste-title").value = "";
+    await refreshDownloads();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 $("mode-movie").addEventListener("click", () => setSearchMode("movie"));
 $("mode-show").addEventListener("click", () => setSearchMode("series"));
 $("back-btn").addEventListener("click", handleBack);

@@ -1,6 +1,8 @@
 from typing import Any
 from urllib.parse import quote
 
+from urllib.parse import quote
+
 import httpx
 
 from backend.config import Settings
@@ -151,6 +153,10 @@ class StremioClient:
         return imdb_id
 
     async def _get_json(self, url: str) -> dict[str, Any]:
-        response = await self.client.get(url)
+        fetch_url = url
+        bridge = self.settings.addon_bridge_url.strip()
+        if bridge:
+            fetch_url = f"{bridge.rstrip('/')}/fetch?url={quote(url, safe='')}"
+        response = await self.client.get(fetch_url)
         response.raise_for_status()
         return response.json()

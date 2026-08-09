@@ -58,6 +58,12 @@ class DownloadRequest(BaseModel):
     episode: int | None = None
 
 
+class PasteDownloadRequest(BaseModel):
+    link: str
+    title: str | None = None
+    content_type: Literal["movie", "series"] = "movie"
+
+
 class DownloadJob(BaseModel):
     id: str
     imdb_id: str

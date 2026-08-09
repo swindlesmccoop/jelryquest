@@ -93,6 +93,36 @@ class DownloadManager:
         )
         return job
 
+    async def enqueue_direct(
+        self,
+        download_url: str,
+        title: str,
+        content_type: Literal["movie", "series"] = "movie",
+        rd_link: str | None = None,
+        rd_client: Any | None = None,
+    ) -> DownloadJob:
+        job_id = str(uuid.uuid4())[:8]
+        download_dir = self.settings.download_path_for(content_type)
+        job = DownloadJob(
+            id=job_id,
+            imdb_id="paste",
+            stream_index=-1,
+            title=title,
+            state=DownloadState.queued,
+        )
+        self.jobs[job_id] = job
+        asyncio.create_task(
+            self._run(
+                job,
+                download_url,
+                title,
+                download_dir,
+                rd_link,
+                rd_client,
+            )
+        )
+        return job
+
     async def _run(
         self,
         job: DownloadJob,

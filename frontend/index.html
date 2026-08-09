@@ -56,6 +56,31 @@
         <div id="content-body"></div>
       </section>
 
+      <section class="paste-panel">
+        <h2>Paste link</h2>
+        <p class="meta">
+          Magnet, <code>real-debrid.com</code> page link, or direct download URL.
+          Saves to the folder for the selected Movie / Show mode above.
+        </p>
+        <form id="paste-form">
+          <textarea
+            id="paste-link"
+            rows="3"
+            placeholder="magnet:?xt=urn:btih:… or https://real-debrid.com/d/… or https://…"
+            autocomplete="off"
+          ></textarea>
+          <input
+            type="text"
+            id="paste-title"
+            placeholder="Optional filename title"
+            autocomplete="off"
+          />
+          <div class="paste-actions">
+            <button type="submit">Download link</button>
+          </div>
+        </form>
+      </section>
+
       <section id="downloads-section">
         <h2>Downloads</h2>
         <ul id="downloads"></ul>
