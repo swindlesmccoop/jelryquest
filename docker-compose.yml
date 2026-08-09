@@ -10,7 +10,6 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       # Avoid Magic DNS in the sidecar namespace (often breaks resolution before TS is up)
       TS_ACCEPT_DNS: "false"
-      TS_EXTRA_ARGS: --exit-node-allow-lan-access
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
