@@ -57,8 +57,8 @@ def title_from_url(url: str) -> str | None:
 async def resolve_pasted_link(
     raw: str,
     rd_client: RealDebridClient,
-) -> tuple[str | None, str | None, str | None]:
-    """Return (direct_ddl_or_none, rd_panel_link_or_none, suggested_title)."""
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return (direct_ddl, rd_panel_link, suggested_title, filename_hint)."""
     kind = classify_pasted_link(raw)
     text = raw.strip()
 
@@ -66,10 +66,14 @@ async def resolve_pasted_link(
         info_hash = magnet_info_hash(text)
         magnet = build_magnet(info_hash)
         resolved = await rd_client.resolve_magnet_to_rd_link(info_hash)
-        title = title_from_magnet(magnet) or resolved.filename
-        return None, resolved.rd_link, title
+        magnet_title = title_from_magnet(magnet)
+        filename = resolved.filename
+        title = magnet_title or filename
+        return None, resolved.rd_link, title, filename
 
     if kind == "rd":
-        return None, text, title_from_url(text)
+        url_title = title_from_url(text)
+        return None, text, url_title, url_title
 
-    return text, None, title_from_url(text)
+    url_title = title_from_url(text)
+    return text, None, url_title, url_title

@@ -123,6 +123,7 @@ class StremioClient:
                     url=normalized["url"],
                     infoHash=normalized["info_hash"],
                     fileIdx=normalized["file_idx"],
+                    filename=normalized["filename"],
                     raw=normalized["raw"],
                 )
             )
@@ -139,12 +140,15 @@ class StremioClient:
         hints = stream.get("behaviorHints") or {}
         hint_filename = (hints.get("filename") or "").strip()
 
+        filename = hint_filename or None
         if url:
             parsed = parse_torrentio_stream_url(url)
             if not info_hash and parsed.get("info_hash"):
                 info_hash = parsed["info_hash"]
             if file_idx is None and parsed.get("file_idx") is not None:
                 file_idx = parsed["file_idx"]
+            if not filename and parsed.get("filename"):
+                filename = parsed["filename"]
             if hint_filename and not title:
                 title = hint_filename
             elif hint_filename and title and "\n" in title:
@@ -158,6 +162,7 @@ class StremioClient:
             "url": url,
             "info_hash": info_hash,
             "file_idx": file_idx,
+            "filename": filename,
             "raw": stream,
         }
 

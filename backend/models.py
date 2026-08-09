@@ -38,6 +38,7 @@ class StreamItem(BaseModel):
     magnet: str | None = None
     rd_link: str | None = None
     ddl: str | None = None
+    filename: str | None = None
     resolve_error: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 

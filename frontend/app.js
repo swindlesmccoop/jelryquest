@@ -200,7 +200,7 @@ function showStreamsList(streams, titleLabel) {
       `;
       if (hasDdl) {
         li.querySelector(".download-btn").addEventListener("click", () =>
-          startDownload(stream.index, titleLabel)
+          startDownload(stream.index)
         );
       }
       list.appendChild(li);
@@ -232,12 +232,11 @@ async function showFiles(item, episode, titleLabel = null) {
   }
 }
 
-async function startDownload(streamIndex, title) {
+async function startDownload(streamIndex) {
   if (!selectedItem) return;
   const body = {
     imdb_id: selectedItem.id,
     stream_index: streamIndex,
-    title,
     content_type: searchMode === "series" ? "series" : "movie",
   };
   if (selectedEpisode) {

@@ -5,7 +5,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 import httpx
 
@@ -28,6 +28,32 @@ def sanitize_filename(name: str) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*]', "", name)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned[:200] or "download"
+
+
+def filename_from_url(url: str) -> str | None:
+    name = Path(urlparse(url).path).name
+    if not name or name in ("/", ".", ".."):
+        return None
+    return unquote(name)
+
+
+def resolve_dest_filename(
+    filename_hint: str | None,
+    url: str,
+    content_type: str | None,
+    fallback: str,
+) -> str:
+    for raw in (filename_hint, filename_from_url(url)):
+        if not raw or not raw.strip():
+            continue
+        cleaned = sanitize_filename(raw.strip())
+        if not cleaned:
+            continue
+        if "." in cleaned:
+            return cleaned
+        return f"{cleaned}{guess_extension(url, content_type)}"
+    base = sanitize_filename(fallback)
+    return f"{base}{guess_extension(url, content_type)}"
 
 
 def guess_extension(url: str, content_type: str | None) -> str:
@@ -76,7 +102,14 @@ class DownloadManager:
             )
 
         job_id = str(uuid.uuid4())[:8]
-        display_title = title or stream.title or stream.name or imdb_id
+        display_title = (
+            stream.title or stream.name or title or stream.filename or imdb_id
+        )
+        filename_hint = stream.filename
+        if not filename_hint and stream.title and "\n" in stream.title:
+            first_line = stream.title.split("\n", 1)[0].strip()
+            if first_line:
+                filename_hint = first_line
         download_dir = self.settings.download_path_for(content_type)
         job = DownloadJob(
             id=job_id,
@@ -95,6 +128,7 @@ class DownloadManager:
                 rd_link,
                 rd_client,
                 stream,
+                filename_hint,
             )
         )
         return job
@@ -119,6 +153,7 @@ class DownloadManager:
         content_type: Literal["movie", "series"] = "movie",
         rd_link: str | None = None,
         rd_client: Any | None = None,
+        filename_hint: str | None = None,
     ) -> DownloadJob:
         if not direct_url and not rd_link:
             raise ValueError("No download URL or Real Debrid link")
@@ -140,6 +175,8 @@ class DownloadManager:
                 download_dir,
                 rd_link,
                 rd_client,
+                None,
+                filename_hint or title,
             )
         )
         return job
@@ -153,6 +190,7 @@ class DownloadManager:
         rd_link: str | None = None,
         rd_client: Any | None = None,
         stream: StreamItem | None = None,
+        filename_hint: str | None = None,
     ) -> None:
         async with self._lock:
             while self._active >= self.settings.max_active_downloads:
@@ -163,6 +201,7 @@ class DownloadManager:
         Path(download_dir).mkdir(parents=True, exist_ok=True)
 
         active_rd_link = rd_link
+        dest_filename_hint = filename_hint
         try:
             url = direct_url
             if not active_rd_link and stream and stream.info_hash and rd_client:
@@ -171,18 +210,22 @@ class DownloadManager:
                     stream.file_idx,
                 )
                 active_rd_link = resolved.rd_link
-                if resolved.filename and not title:
-                    title = resolved.filename
+                if resolved.filename:
+                    dest_filename_hint = resolved.filename
             if active_rd_link and rd_client:
                 url = await rd_client.resolve_download_url(active_rd_link)
             if not url:
                 raise ValueError("No download URL or Real Debrid link")
-            await self._download_file(job, url, title, download_dir)
+            await self._download_file(
+                job, url, download_dir, dest_filename_hint, title
+            )
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (403, 429) and active_rd_link and rd_client:
                 try:
                     new_url = await rd_client.resolve_download_url(active_rd_link)
-                    await self._download_file(job, new_url, title, download_dir)
+                    await self._download_file(
+                        job, new_url, download_dir, dest_filename_hint, title
+                    )
                     return
                 except Exception:
                     pass
@@ -204,8 +247,9 @@ class DownloadManager:
         self,
         job: DownloadJob,
         url: str,
-        title: str,
         download_dir: str,
+        filename_hint: str | None,
+        fallback_title: str,
     ) -> None:
         async with self.client.stream("GET", url, follow_redirects=True) as response:
             if response.status_code in (403, 429):
@@ -216,12 +260,19 @@ class DownloadManager:
                 )
             response.raise_for_status()
             mime_type = response.headers.get("content-type")
-            ext = guess_extension(str(response.url), mime_type)
-            filename = f"{sanitize_filename(title)}{ext}"
+            final_url = str(response.url)
+            filename = resolve_dest_filename(
+                filename_hint,
+                final_url,
+                mime_type,
+                fallback_title,
+            )
             dest_dir = Path(download_dir)
             dest = dest_dir / filename
             if dest.exists():
-                dest = dest_dir / f"{sanitize_filename(title)}_{job.id}{ext}"
+                stem = dest.stem
+                suffix = dest.suffix
+                dest = dest_dir / f"{stem}_{job.id}{suffix}"
             job.filename = dest.name
 
             total = response.headers.get("content-length")

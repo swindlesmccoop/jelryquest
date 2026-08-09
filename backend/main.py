@@ -224,7 +224,9 @@ async def download_pasted_link(body: PasteDownloadRequest) -> dict:
             "Real Debrid API token required for magnet and real-debrid.com links",
         )
     try:
-        direct_url, rd_link, suggested_title = await resolve_pasted_link(body.link, rd_client)
+        direct_url, rd_link, suggested_title, filename_hint = await resolve_pasted_link(
+            body.link, rd_client
+        )
         title = (body.title or suggested_title or "download").strip()
         job = await downloads.enqueue_direct(
             direct_url,
@@ -232,6 +234,7 @@ async def download_pasted_link(body: PasteDownloadRequest) -> dict:
             body.content_type,
             rd_link,
             rd_client,
+            filename_hint,
         )
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Link resolve failed: {exc}") from exc
