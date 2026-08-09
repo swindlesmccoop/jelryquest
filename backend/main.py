@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -43,12 +44,29 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(60.0, connect=30.0),
         follow_redirects=True,
     )
-    egress_state = await verify_egress_on_startup(settings)
+    egress_state = EgressResult(
+        ok=False,
+        observed_ip=None,
+        expected_ip=settings.expected_egress_ip.strip(),
+        message="Egress check in progress",
+    )
     rd_client = RealDebridClient(settings, http_client)
     stremio = StremioClient(settings, http_client, rd_client)
     downloads = DownloadManager(settings, http_client)
-    logger.info("JelryQuest started")
+
+    async def run_egress() -> None:
+        global egress_state
+        egress_state = await verify_egress_on_startup(settings)
+        logger.info("JelryQuest egress check complete: %s", egress_state.message)
+
+    egress_task = asyncio.create_task(run_egress())
+    logger.info("JelryQuest listening on port %s (egress check in background)", settings.web_port)
     yield
+    egress_task.cancel()
+    try:
+        await egress_task
+    except asyncio.CancelledError:
+        pass
     await http_client.aclose()
 
 
