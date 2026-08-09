@@ -10,7 +10,7 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       # Avoid Magic DNS in the sidecar namespace (often breaks resolution before TS is up)
       TS_ACCEPT_DNS: "false"
-      TS_EXTRA_ARGS: --exit-node=${TS_EXIT_NODE} --exit-node-allow-lan-access
+      TS_EXTRA_ARGS: --exit-node-allow-lan-access
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -36,6 +36,35 @@ services:
       start_period: 90s
     restart: unless-stopped
 
+  # tailscale up rejects short hostnames (e.g. "regxa") before login; set exit node after auth.
+  exit-node-config:
+    image: tailscale/tailscale:latest
+    network_mode: service:tailscale
+    environment:
+      TS_EXIT_NODE: ${TS_EXIT_NODE}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        sock=/tmp/tailscaled.sock
+        echo "Waiting for tailscale backend..."
+        for i in $(seq 1 90); do
+          if tailscale --socket="$$sock" status --json 2>/dev/null | grep -q '"BackendState":"Running"'; then
+            break
+          fi
+          sleep 2
+        done
+        if ! tailscale --socket="$$sock" status --json | grep -q '"BackendState":"Running"'; then
+          echo "tailscale backend not running"
+          exit 1
+        fi
+        echo "Setting exit node to $$TS_EXIT_NODE"
+        tailscale --socket="$$sock" set --exit-node="$$TS_EXIT_NODE" --exit-node-allow-lan-access
+        tailscale --socket="$$sock" status
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build: .
     network_mode: service:tailscale
@@ -56,6 +85,8 @@ services:
     depends_on:
       tailscale:
         condition: service_healthy
+      exit-node-config:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 networks:
