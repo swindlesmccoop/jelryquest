@@ -15,7 +15,11 @@ from backend.models import DownloadJob, DownloadState, StreamItem
 logger = logging.getLogger(__name__)
 
 RD_ERROR_HINT = (
-    "VPS IP may already be downloading on Real Debrid—wait or pause the other job."
+    "Real Debrid rejected the download link (403/429). Common causes: another device "
+    "is using your RD account from a different IP, the link expired, or this server's "
+    "egress IP does not match the IP used when the link was created. Check active "
+    "downloads at real-debrid.com/downloads — RD allows many jobs from one IP, not "
+    "one job per account."
 )
 
 
