@@ -166,6 +166,16 @@ function renderLinkRow(label, url) {
   `;
 }
 
+function canDownloadStream(stream) {
+  return !!(
+    stream.ddl ||
+    stream.rd_link ||
+    stream.magnet ||
+    stream.infoHash ||
+    stream.info_hash
+  );
+}
+
 function showStreamsList(streams, titleLabel) {
   contentView = "files";
   const list = document.createElement("ul");
@@ -178,7 +188,7 @@ function showStreamsList(streams, titleLabel) {
       li.className = "card stream-item";
       const label = stream.name || `Stream ${stream.index + 1}`;
       const desc = stream.title || "No description";
-      const hasDdl = !!stream.ddl || !!stream.rd_link || !!stream.infoHash || !!stream.magnet;
+      const hasDdl = canDownloadStream(stream);
       li.innerHTML = `
         <div><strong>${escapeHtml(label)}</strong></div>
         <div class="stream-title meta">${escapeHtml(desc)}</div>

@@ -6,6 +6,7 @@ import httpx
 from backend.config import Settings
 from backend.models import EpisodeItem, SearchResult, StreamItem
 from backend.real_debrid import RealDebridClient
+from backend.torrentio_urls import is_torrentio_resolve_url, parse_torrentio_stream_url
 
 MAX_STREAMS = 10
 
@@ -113,20 +114,52 @@ class StremioClient:
         streams = data.get("streams") or []
         items: list[StreamItem] = []
         for index, stream in enumerate(streams[:MAX_STREAMS]):
+            normalized = self._normalize_raw_stream(stream)
             items.append(
                 StreamItem(
                     index=index,
-                    name=stream.get("name"),
-                    title=stream.get("title"),
-                    url=stream.get("url"),
-                    infoHash=stream.get("infoHash"),
-                    fileIdx=stream.get("fileIdx"),
-                    raw=stream,
+                    name=normalized["name"],
+                    title=normalized["title"],
+                    url=normalized["url"],
+                    infoHash=normalized["info_hash"],
+                    fileIdx=normalized["file_idx"],
+                    raw=normalized["raw"],
                 )
             )
         if self.rd_client and self.settings.resolved_rd_token:
             return await self.rd_client.enrich_streams(items)
         return await self._enrich_fast_path(items)
+
+    def _normalize_raw_stream(self, stream: dict[str, Any]) -> dict[str, Any]:
+        url = stream.get("url")
+        info_hash = stream.get("infoHash")
+        file_idx = stream.get("fileIdx")
+        title = stream.get("title")
+
+        hints = stream.get("behaviorHints") or {}
+        hint_filename = (hints.get("filename") or "").strip()
+
+        if url:
+            parsed = parse_torrentio_stream_url(url)
+            if not info_hash and parsed.get("info_hash"):
+                info_hash = parsed["info_hash"]
+            if file_idx is None and parsed.get("file_idx") is not None:
+                file_idx = parsed["file_idx"]
+            if hint_filename and not title:
+                title = hint_filename
+            elif hint_filename and title and "\n" in title:
+                first_line = title.split("\n", 1)[0].strip()
+                if not first_line:
+                    title = hint_filename
+
+        return {
+            "name": stream.get("name"),
+            "title": title,
+            "url": url,
+            "info_hash": info_hash,
+            "file_idx": file_idx,
+            "raw": stream,
+        }
 
     async def _enrich_fast_path(self, items: list[StreamItem]) -> list[StreamItem]:
         from backend.real_debrid import build_magnet
@@ -137,7 +170,11 @@ class StremioClient:
             magnet = build_magnet(item.info_hash) if item.info_hash else None
             rd_link = item.url.strip() if item.url and is_realdebrid_url(item.url) else None
             ddl = None
-            if item.url and not is_realdebrid_url(item.url):
+            if (
+                item.url
+                and not is_realdebrid_url(item.url)
+                and not is_torrentio_resolve_url(item.url)
+            ):
                 ddl = item.url
             enriched.append(
                 item.model_copy(
