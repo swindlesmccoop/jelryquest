@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     stremio_addon_manifest_url: str
     real_debrid_api_token: str | None = None
     download_dir: str = "/downloads"
+    download_dir_movies: str | None = None
+    download_dir_series: str | None = None
     expected_egress_ip: str
     egress_check_url: str = "https://api.ipify.org"
     egress_check_strict: bool = True
@@ -35,6 +38,15 @@ class Settings(BaseSettings):
         if self.real_debrid_api_token:
             return self.real_debrid_api_token
         return _extract_rd_token(self.stremio_addon_manifest_url)
+
+    def download_path_for(self, content_type: Literal["movie", "series"]) -> str:
+        if content_type == "series":
+            return (
+                self.download_dir_series
+                or self.download_dir_movies
+                or self.download_dir
+            )
+        return self.download_dir_movies or self.download_dir
 
 
 @lru_cache

@@ -32,11 +32,14 @@ services:
     build: .
     network_mode: service:tailscale
     volumes:
-      - ${DOWNLOAD_PATH:-./downloads}:/downloads
+      - ${DOWNLOAD_PATH_MOVIES:-${DOWNLOAD_PATH:-./downloads/movies}}:/downloads/movies
+      - ${DOWNLOAD_PATH_SERIES:-./downloads/series}:/downloads/series
     environment:
       STREMIO_ADDON_MANIFEST_URL: ${STREMIO_ADDON_MANIFEST_URL}
       REAL_DEBRID_API_TOKEN: ${REAL_DEBRID_API_TOKEN:-}
-      DOWNLOAD_DIR: /downloads
+      DOWNLOAD_DIR: /downloads/movies
+      DOWNLOAD_DIR_MOVIES: /downloads/movies
+      DOWNLOAD_DIR_SERIES: /downloads/series
       EXPECTED_EGRESS_IP: ${EXPECTED_EGRESS_IP}
       EGRESS_CHECK_URL: ${EGRESS_CHECK_URL:-https://api.ipify.org}
       EGRESS_CHECK_STRICT: ${EGRESS_CHECK_STRICT:-true}

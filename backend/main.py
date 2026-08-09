@@ -178,6 +178,7 @@ async def start_download(body: DownloadRequest) -> dict:
             stream,
             body.title,
             rd_client,
+            body.content_type,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

@@ -4,7 +4,7 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -61,6 +61,7 @@ class DownloadManager:
         stream: StreamItem,
         title: str | None = None,
         rd_client: Any | None = None,
+        content_type: Literal["movie", "series"] = "movie",
     ) -> DownloadJob:
         download_url = stream.ddl or stream.url
         if not download_url:
@@ -71,6 +72,7 @@ class DownloadManager:
 
         job_id = str(uuid.uuid4())[:8]
         display_title = title or stream.title or stream.name or imdb_id
+        download_dir = self.settings.download_path_for(content_type)
         job = DownloadJob(
             id=job_id,
             imdb_id=imdb_id,
@@ -80,7 +82,14 @@ class DownloadManager:
         )
         self.jobs[job_id] = job
         asyncio.create_task(
-            self._run(job, download_url, display_title, stream.rd_link, rd_client)
+            self._run(
+                job,
+                download_url,
+                display_title,
+                download_dir,
+                stream.rd_link,
+                rd_client,
+            )
         )
         return job
 
@@ -89,6 +98,7 @@ class DownloadManager:
         job: DownloadJob,
         url: str,
         title: str,
+        download_dir: str,
         rd_link: str | None = None,
         rd_client: Any | None = None,
     ) -> None:
@@ -98,16 +108,15 @@ class DownloadManager:
             self._active += 1
 
         job.state = DownloadState.downloading
-        download_dir = Path(self.settings.download_dir)
-        download_dir.mkdir(parents=True, exist_ok=True)
+        Path(download_dir).mkdir(parents=True, exist_ok=True)
 
         try:
-            await self._download_file(job, url, title)
+            await self._download_file(job, url, title, download_dir)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (403, 429) and rd_link and rd_client:
                 try:
                     new_url = await rd_client.unrestrict_link(rd_link)
-                    await self._download_file(job, new_url, title)
+                    await self._download_file(job, new_url, title, download_dir)
                     return
                 except Exception:
                     pass
@@ -130,6 +139,7 @@ class DownloadManager:
         job: DownloadJob,
         url: str,
         title: str,
+        download_dir: str,
     ) -> None:
         async with self.client.stream("GET", url, follow_redirects=True) as response:
             if response.status_code in (403, 429):
@@ -139,13 +149,13 @@ class DownloadManager:
                     response=response,
                 )
             response.raise_for_status()
-            content_type = response.headers.get("content-type")
-            ext = guess_extension(str(response.url), content_type)
+            mime_type = response.headers.get("content-type")
+            ext = guess_extension(str(response.url), mime_type)
             filename = f"{sanitize_filename(title)}{ext}"
-            download_dir = Path(self.settings.download_dir)
-            dest = download_dir / filename
+            dest_dir = Path(download_dir)
+            dest = dest_dir / filename
             if dest.exists():
-                dest = download_dir / f"{sanitize_filename(title)}_{job.id}{ext}"
+                dest = dest_dir / f"{sanitize_filename(title)}_{job.id}{ext}"
             job.filename = dest.name
 
             total = response.headers.get("content-length")
@@ -168,4 +178,4 @@ class DownloadManager:
 
         job.state = DownloadState.done
         job.speed_bps = None
-        logger.info("Download complete: %s -> %s", job.id, job.filename)
+        logger.info("Download complete: %s -> %s/%s", job.id, download_dir, job.filename)
