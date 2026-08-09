@@ -29,12 +29,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "tailscale status --json | grep -q '\"BackendState\":\"Running\"'",
+          "tailscale --socket=/tmp/tailscaled.sock status 2>/dev/null | grep -qE '100\\.'",
         ]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 12
-      start_period: 90s
+      retries: 6
+      start_period: 30s
     restart: unless-stopped
 
   app:
@@ -56,7 +56,7 @@ services:
       WEB_PORT: ${WEB_PORT:-8080}
     depends_on:
       tailscale:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
 
 networks:
