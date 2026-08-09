@@ -1,0 +1,48 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: jelryquest
+    volumes:
+      - ./tailscale-state:/var/lib/tailscale
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      # Avoid Magic DNS in the sidecar namespace (often breaks resolution before TS is up)
+      TS_ACCEPT_DNS: "false"
+      TS_EXTRA_ARGS: --exit-node=${TS_EXIT_NODE} --exit-node-allow-lan-access
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    ports:
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 45s
+    restart: unless-stopped
+
+  app:
+    build: .
+    network_mode: service:tailscale
+    volumes:
+      - ${DOWNLOAD_PATH:-./downloads}:/downloads
+    environment:
+      STREMIO_ADDON_MANIFEST_URL: ${STREMIO_ADDON_MANIFEST_URL}
+      REAL_DEBRID_API_TOKEN: ${REAL_DEBRID_API_TOKEN:-}
+      DOWNLOAD_DIR: /downloads
+      EXPECTED_EGRESS_IP: ${EXPECTED_EGRESS_IP}
+      EGRESS_CHECK_URL: ${EGRESS_CHECK_URL:-https://api.ipify.org}
+      EGRESS_CHECK_STRICT: ${EGRESS_CHECK_STRICT:-true}
+      MAX_ACTIVE_DOWNLOADS: ${MAX_ACTIVE_DOWNLOADS:-1}
+      WEB_PORT: ${WEB_PORT:-8080}
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    restart: unless-stopped

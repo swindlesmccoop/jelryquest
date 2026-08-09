@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JelryQuest</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>JelryQuest</h1>
+      <p id="health-status" class="health">Checking egress…</p>
+    </header>
+
+    <main>
+      <section class="search-panel">
+        <div class="mode-toggle" role="tablist" aria-label="Search type">
+          <button
+            type="button"
+            id="mode-movie"
+            class="mode-btn active"
+            data-mode="movie"
+            role="tab"
+            aria-selected="true"
+          >
+            Movie
+          </button>
+          <button
+            type="button"
+            id="mode-show"
+            class="mode-btn"
+            data-mode="series"
+            role="tab"
+            aria-selected="false"
+          >
+            Show
+          </button>
+        </div>
+        <form id="search-form">
+          <input
+            type="text"
+            id="query"
+            placeholder="Movie name…"
+            autocomplete="off"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
+      </section>
+
+      <section id="content-panel" class="hidden">
+        <div class="content-header">
+          <button type="button" id="back-btn" class="back-btn hidden">← Back</button>
+          <h2 id="content-title">Results</h2>
+        </div>
+        <div id="content-body"></div>
+      </section>
+
+      <section id="downloads-section">
+        <h2>Downloads</h2>
+        <ul id="downloads"></ul>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
