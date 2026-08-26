@@ -1,4 +1,10 @@
-from backend.rd_urls import is_cdn_link, is_panel_link, is_realdebrid_url
+from backend.rd_urls import (
+    apply_preferred_cdn,
+    is_cdn_link,
+    is_panel_link,
+    is_realdebrid_url,
+    normalize_cdn_host,
+)
 
 
 def test_panel_link():

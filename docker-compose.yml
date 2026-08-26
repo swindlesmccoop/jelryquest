@@ -54,9 +54,23 @@ services:
     volumes:
       - ${DOWNLOAD_PATH_MOVIES:-${DOWNLOAD_PATH:-./downloads/movies}}:/downloads/movies
       - ${DOWNLOAD_PATH_SERIES:-./downloads/series}:/downloads/series
+      - jelryquest-cache:/cache
     environment:
       STREMIO_ADDON_MANIFEST_URL: ${STREMIO_ADDON_MANIFEST_URL}
       REAL_DEBRID_API_TOKEN: ${REAL_DEBRID_API_TOKEN:-}
+      REAL_DEBRID_API_BASE: ${REAL_DEBRID_API_BASE:-https://api.real-debrid.com/rest/1.0}
+      REAL_DEBRID_REMOTE: ${REAL_DEBRID_REMOTE:-0}
+      REAL_DEBRID_PREFERRED_CDN: ${REAL_DEBRID_PREFERRED_CDN:-}
+      REAL_DEBRID_AUTO_SCAN: ${REAL_DEBRID_AUTO_SCAN:-1}
+      REAL_DEBRID_SCAN_SECONDS: ${REAL_DEBRID_SCAN_SECONDS:-6.0}
+      REAL_DEBRID_SCAN_WORKERS: ${REAL_DEBRID_SCAN_WORKERS:-8}
+      REAL_DEBRID_SCAN_HOSTS: ${REAL_DEBRID_SCAN_HOSTS:-}
+      REAL_DEBRID_SCAN_TOP: ${REAL_DEBRID_SCAN_TOP:-20}
+      REAL_DEBRID_SCAN_CONNECT_TIMEOUT_SEC: ${REAL_DEBRID_SCAN_CONNECT_TIMEOUT_SEC:-8}
+      REAL_DEBRID_SCAN_CACHE_TTL_SEC: ${REAL_DEBRID_SCAN_CACHE_TTL_SEC:-86400}
+      REAL_DEBRID_CONNECT_TIMEOUT_SEC: ${REAL_DEBRID_CONNECT_TIMEOUT_SEC:-15}
+      REAL_DEBRID_READ_TIMEOUT_SEC: ${REAL_DEBRID_READ_TIMEOUT_SEC:-60}
+      CACHE_DIR: /cache
       DOWNLOAD_DIR: /downloads/movies
       DOWNLOAD_DIR_MOVIES: /downloads/movies
       DOWNLOAD_DIR_SERIES: /downloads/series
@@ -78,3 +92,6 @@ networks:
     name: ${CADDY_NETWORK:-caddy}
   default:
     driver: bridge
+
+volumes:
+  jelryquest-cache:

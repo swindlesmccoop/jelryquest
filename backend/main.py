@@ -21,6 +21,7 @@ from backend.models import (
     StreamItem,
 )
 from backend.real_debrid import RealDebridClient
+from backend.server_scan import get_scan_status, start_background_server_scan
 from backend.stremio_client import StremioClient
 
 logging.basicConfig(
@@ -56,6 +57,8 @@ async def lifespan(app: FastAPI):
     stremio = StremioClient(settings, http_client, rd_client)
     downloads = DownloadManager(settings, http_client)
 
+    asyncio.create_task(start_background_server_scan(http_client))
+
     async def run_egress() -> None:
         global egress_state
         egress_state = await verify_egress_on_startup(settings)
@@ -84,12 +87,14 @@ async def health() -> HealthResponse:
             observed_ip=None,
             expected_ip=settings.expected_egress_ip,
             message="Egress check pending",
+            rd_cdn_scan=get_scan_status(),
         )
     return HealthResponse(
         egress_ok=egress_state.ok,
         observed_ip=egress_state.observed_ip,
         expected_ip=egress_state.expected_ip,
         message=egress_state.message,
+        rd_cdn_scan=get_scan_status(),
     )
 
 

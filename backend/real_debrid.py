@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -8,11 +9,19 @@ import httpx
 
 from backend.config import Settings
 from backend.models import ResolvedLinks, StreamItem
-from backend.rd_urls import is_realdebrid_url, needs_unrestrict
+from backend.rd_urls import apply_preferred_cdn, is_realdebrid_url, needs_unrestrict
 
 logger = logging.getLogger(__name__)
 
-RD_API_BASE = "https://api.real-debrid.com/rest/1.0"
+RD_API_BASE = (
+    os.environ.get("REAL_DEBRID_API_BASE") or "https://api.real-debrid.com/rest/1.0"
+).rstrip("/")
+RD_REMOTE = (os.environ.get("REAL_DEBRID_REMOTE") or "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 POLL_INTERVAL_SEC = 2.0
 POLL_TIMEOUT_SEC = 60.0
 
@@ -75,10 +84,14 @@ class RealDebridClient:
         **kwargs: Any,
     ) -> Any:
         url = f"{RD_API_BASE}{path}"
+        connect_to = float(os.environ.get("REAL_DEBRID_CONNECT_TIMEOUT_SEC", "15"))
+        read_to = float(os.environ.get("REAL_DEBRID_READ_TIMEOUT_SEC", "60"))
+        timeout = httpx.Timeout(read_to, connect=connect_to)
         response = await self.client.request(
             method,
             url,
             headers=self._headers(),
+            timeout=timeout,
             **kwargs,
         )
         response.raise_for_status()
@@ -141,12 +154,15 @@ class RealDebridClient:
             logger.warning("Failed to delete RD torrent %s", torrent_id)
 
     async def unrestrict_link(self, link: str) -> str:
-        data = await self._request(
+        data: dict[str, str] = {"link": link}
+        if RD_REMOTE:
+            data["remote"] = "1"
+        payload = await self._request(
             "POST",
             "/unrestrict/link",
-            data={"link": link},
+            data=data,
         )
-        download_url = data.get("download")
+        download_url = payload.get("download")
         if not download_url:
             raise ValueError("Real Debrid unrestrict did not return a download URL")
         return download_url
@@ -157,8 +173,17 @@ class RealDebridClient:
         if not raw:
             raise ValueError("Empty Real Debrid link")
         if needs_unrestrict(raw):
-            return await self.unrestrict_link(raw)
-        return raw
+            url = await self.unrestrict_link(raw)
+        else:
+            url = raw
+        rewritten = apply_preferred_cdn(url)
+        if rewritten != url:
+            logger.info(
+                "Real-Debrid CDN host %s -> %s",
+                httpx.URL(url).host,
+                httpx.URL(rewritten).host,
+            )
+        return rewritten
 
     async def wait_for_downloaded(
         self,

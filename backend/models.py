@@ -84,3 +84,4 @@ class HealthResponse(BaseModel):
     observed_ip: str | None
     expected_ip: str
     message: str | None = None
+    rd_cdn_scan: dict[str, Any] | None = None
