@@ -6,6 +6,7 @@ let selectedItem = null;
 let episodes = [];
 let selectedEpisode = null;
 let contentView = null;
+let scanPollTimer = null;
 
 async function api(path, options = {}) {
   const res = await fetch(path, options);
@@ -266,10 +267,69 @@ function handleBack() {
   }
 }
 
+function renderRdScanHint(scan) {
+  const hint = $("rd-scan-hint");
+  if (!hint) return;
+
+  if (!scan || !scan.state || scan.state === "disabled") {
+    hint.textContent = "";
+    hint.className = "rd-scan-hint";
+    return;
+  }
+
+  switch (scan.state) {
+    case "pinned":
+      hint.textContent = `Real-Debrid CDN pinned: ${scan.winner || "(unknown)"}`;
+      hint.className = "rd-scan-hint ok";
+      return;
+    case "cached":
+      hint.textContent =
+        `Real-Debrid CDN cached: ${scan.winner || "(unknown)"}` +
+        (scan.mbps ? ` (${Number(scan.mbps).toFixed(1)} Mbps)` : "");
+      hint.className = "rd-scan-hint ok";
+      return;
+    case "scanning": {
+      const eta =
+        typeof scan.eta_sec === "number" ? Math.round(scan.eta_sec) : null;
+      hint.textContent = `Scanning Real-Debrid CDN${
+        eta !== null ? ` (ETA ~${eta}s)` : ""
+      }…`;
+      hint.className = "rd-scan-hint scanning";
+      return;
+    }
+    case "done":
+      hint.textContent =
+        `Real-Debrid CDN selected: ${scan.winner || "(unknown)"}` +
+        (scan.mbps ? ` (${Number(scan.mbps).toFixed(1)} Mbps)` : "");
+      hint.className = "rd-scan-hint ok";
+      return;
+    case "error":
+      hint.textContent = `Real-Debrid CDN scan error${
+        scan.error ? `: ${scan.error}` : ""
+      }`;
+      hint.className = "rd-scan-hint bad";
+      return;
+    default:
+      hint.textContent = "";
+      hint.className = "rd-scan-hint";
+  }
+}
+
+function scheduleScanPoll(isScanning) {
+  if (scanPollTimer) {
+    clearInterval(scanPollTimer);
+    scanPollTimer = null;
+  }
+  if (!isScanning) return;
+  scanPollTimer = setInterval(() => refreshHealth(), 3500);
+}
+
 async function refreshHealth() {
   const el = $("health-status");
   try {
     const h = await api("/api/health");
+    renderRdScanHint(h.rd_cdn_scan);
+    scheduleScanPoll(h.rd_cdn_scan && h.rd_cdn_scan.state === "scanning");
     if (h.egress_ok) {
       el.textContent = `Egress OK — ${h.observed_ip}`;
       el.className = "health ok";

@@ -47,6 +47,24 @@ h1 {
   color: var(--err);
 }
 
+.rd-scan-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.rd-scan-hint.ok {
+  color: var(--ok);
+}
+
+.rd-scan-hint.scanning {
+  color: var(--accent);
+}
+
+.rd-scan-hint.bad {
+  color: var(--err);
+}
+
 .mode-toggle {
   display: flex;
   gap: 0.35rem;
