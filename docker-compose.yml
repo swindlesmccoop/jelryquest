@@ -35,8 +35,8 @@ services:
         ]
       interval: 5s
       timeout: 5s
-      retries: 6
-      start_period: 30s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
 
   # Torrentio blocks VPS/datacenter IPs; this sidecar fetches addons via home WAN.
@@ -81,7 +81,7 @@ services:
       WEB_PORT: ${WEB_PORT:-8080}
     depends_on:
       tailscale:
-        condition: service_started
+        condition: service_healthy
       addon-bridge:
         condition: service_started
     restart: unless-stopped

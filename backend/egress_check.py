@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 import sys
 from dataclasses import dataclass
 
@@ -8,6 +9,18 @@ import httpx
 from backend.config import Settings
 
 logger = logging.getLogger(__name__)
+
+DNS_PROBE_HOST = "api.ipify.org"
+PUBLIC_RESOLV_CONF = "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions ndots:0\n"
+
+
+def ensure_public_resolvers() -> None:
+    """Write public DNS into the shared tailscale netns resolv.conf."""
+    try:
+        with open("/etc/resolv.conf", "w", encoding="utf-8") as f:
+            f.write(PUBLIC_RESOLV_CONF)
+    except OSError as exc:
+        logger.debug("Could not write /etc/resolv.conf: %s", exc)
 
 
 @dataclass
@@ -36,6 +49,38 @@ DEFAULT_EGRESS_CHECK_URLS = (
     "https://ifconfig.me/ip",
     "https://icanhazip.com",
 )
+
+
+async def wait_for_dns(
+    host: str = DNS_PROBE_HOST,
+    *,
+    retries: int = 60,
+    delay: float = 2.0,
+) -> None:
+    """Wait until the shared tailscale namespace can resolve DNS."""
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    ensure_public_resolvers()
+    for attempt in range(1, retries + 1):
+        try:
+            await loop.run_in_executor(None, socket.gethostbyname, host)
+            logger.info("DNS ready (%s)", host)
+            return
+        except OSError as exc:
+            ensure_public_resolvers()
+            if attempt == retries:
+                raise RuntimeError(
+                    f"DNS not ready for {host} after {retries} attempts: {exc}"
+                ) from exc
+            logger.warning(
+                "DNS not ready (%s), attempt %s/%s: %s",
+                host,
+                attempt,
+                retries,
+                exc,
+            )
+            await asyncio.sleep(delay)
 
 
 async def check_egress(settings: Settings, client: httpx.AsyncClient | None = None) -> EgressResult:
@@ -87,25 +132,34 @@ async def check_egress(settings: Settings, client: httpx.AsyncClient | None = No
 
 
 async def verify_egress_on_startup(
-    settings: Settings, retries: int = 18, delay: float = 5.0
+    settings: Settings,
+    client: httpx.AsyncClient | None = None,
+    retries: int = 18,
+    delay: float = 5.0,
 ) -> EgressResult:
     import asyncio
 
     last: EgressResult | None = None
-    for attempt in range(1, retries + 1):
-        async with httpx.AsyncClient(timeout=30.0) as client:
+    owns_client = client is None
+    if owns_client:
+        client = httpx.AsyncClient(timeout=30.0)
+    try:
+        for attempt in range(1, retries + 1):
             last = await check_egress(settings, client)
-        if last.ok:
-            return last
-        if attempt < retries:
-            logger.warning(
-                "Egress check attempt %s/%s failed; retrying in %ss: %s",
-                attempt,
-                retries,
-                delay,
-                last.message,
-            )
-            await asyncio.sleep(delay)
+            if last.ok:
+                return last
+            if attempt < retries:
+                logger.warning(
+                    "Egress check attempt %s/%s failed; retrying in %ss: %s",
+                    attempt,
+                    retries,
+                    delay,
+                    last.message,
+                )
+                await asyncio.sleep(delay)
+    finally:
+        if owns_client and client is not None:
+            await client.aclose()
 
     assert last is not None
     if settings.egress_check_strict:
