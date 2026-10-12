@@ -16,3 +16,28 @@ def test_parse_empty_raises():
         raise AssertionError("Expected ValueError")
     except ValueError:
         pass
+
+
+def test_disabled_when_no_expected_ip():
+    import asyncio
+
+    from backend.config import Settings
+    from backend.egress_check import verify_egress_on_startup
+
+    settings = Settings(stremio_addon_manifest_url="https://x/manifest.json", expected_egress_ip="")
+    result = asyncio.run(verify_egress_on_startup(settings))
+    assert result.ok
+    assert result.message == "Egress check disabled"
+
+
+def test_resolvers_opt_in(monkeypatch, tmp_path):
+    from backend import egress_check
+
+    opened = []
+    monkeypatch.setattr("builtins.open", lambda *a, **k: opened.append(a) or (_ for _ in ()).throw(OSError()))
+    monkeypatch.delenv("PUBLIC_RESOLVERS", raising=False)
+    egress_check.ensure_public_resolvers()
+    assert not opened
+    monkeypatch.setenv("PUBLIC_RESOLVERS", "1")
+    egress_check.ensure_public_resolvers()
+    assert opened

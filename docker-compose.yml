@@ -74,9 +74,10 @@ services:
       DOWNLOAD_DIR: /downloads/movies
       DOWNLOAD_DIR_MOVIES: /downloads/movies
       DOWNLOAD_DIR_SERIES: /downloads/series
-      EXPECTED_EGRESS_IP: ${EXPECTED_EGRESS_IP}
+      EXPECTED_EGRESS_IP: ${EXPECTED_EGRESS_IP:-}
       EGRESS_CHECK_URL: ${EGRESS_CHECK_URL:-https://api.ipify.org}
       EGRESS_CHECK_STRICT: ${EGRESS_CHECK_STRICT:-true}
+      PUBLIC_RESOLVERS: ${PUBLIC_RESOLVERS:-0}
       MAX_ACTIVE_DOWNLOADS: ${MAX_ACTIVE_DOWNLOADS:-1}
       WEB_PORT: ${WEB_PORT:-8080}
     depends_on:

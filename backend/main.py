@@ -10,7 +10,12 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import Settings, get_settings
 from backend.downloader import DownloadManager
-from backend.egress_check import EgressResult, verify_egress_on_startup, wait_for_dns
+from backend.egress_check import (
+    EgressResult,
+    egress_disabled_result,
+    verify_egress_on_startup,
+    wait_for_dns,
+)
 from backend.link_import import classify_pasted_link, resolve_pasted_link
 from backend.models import (
     DownloadRequest,
@@ -47,12 +52,15 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(60.0, connect=30.0),
         follow_redirects=True,
     )
-    egress_state = EgressResult(
-        ok=False,
-        observed_ip=None,
-        expected_ip=settings.expected_egress_ip.strip(),
-        message="Egress check in progress",
-    )
+    if settings.expected_egress_ip.strip():
+        egress_state = EgressResult(
+            ok=False,
+            observed_ip=None,
+            expected_ip=settings.expected_egress_ip.strip(),
+            message="Egress check in progress",
+        )
+    else:
+        egress_state = egress_disabled_result()
     rd_client = RealDebridClient(settings, http_client)
     stremio = StremioClient(settings, http_client, rd_client)
     downloads = DownloadManager(settings, http_client)
@@ -62,14 +70,15 @@ async def lifespan(app: FastAPI):
         try:
             await wait_for_dns()
         except RuntimeError as exc:
-            egress_state = EgressResult(
-                ok=False,
-                observed_ip=None,
-                expected_ip=settings.expected_egress_ip.strip(),
-                message=str(exc),
-            )
             logger.error("Startup network wait failed: %s", exc)
-            return
+            if settings.expected_egress_ip.strip():
+                egress_state = EgressResult(
+                    ok=False,
+                    observed_ip=None,
+                    expected_ip=settings.expected_egress_ip.strip(),
+                    message=str(exc),
+                )
+                return
 
         await start_background_server_scan(http_client)
         egress_state = await verify_egress_on_startup(settings, http_client)

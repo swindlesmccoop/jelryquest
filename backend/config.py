@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     download_dir: str = "/downloads"
     download_dir_movies: str | None = None
     download_dir_series: str | None = None
-    expected_egress_ip: str
+    expected_egress_ip: str = ""  # empty disables the egress check
     egress_check_url: str = "https://api.ipify.org"
     egress_check_strict: bool = True
     max_active_downloads: int = 1

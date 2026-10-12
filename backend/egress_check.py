@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import socket
 import sys
 from dataclasses import dataclass
@@ -15,7 +16,13 @@ PUBLIC_RESOLV_CONF = "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions ndots:0\n"
 
 
 def ensure_public_resolvers() -> None:
-    """Write public DNS into the shared tailscale netns resolv.conf."""
+    """Write public DNS into the shared tailscale netns resolv.conf (opt-in).
+
+    Off by default: overwriting resolv.conf breaks Docker's embedded DNS, so
+    sibling service names stop resolving. Set PUBLIC_RESOLVERS=1 to enable.
+    """
+    if os.environ.get("PUBLIC_RESOLVERS", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return
     try:
         with open("/etc/resolv.conf", "w", encoding="utf-8") as f:
             f.write(PUBLIC_RESOLV_CONF)
@@ -83,8 +90,16 @@ async def wait_for_dns(
             await asyncio.sleep(delay)
 
 
+def egress_disabled_result() -> EgressResult:
+    return EgressResult(
+        ok=True, observed_ip=None, expected_ip="", message="Egress check disabled"
+    )
+
+
 async def check_egress(settings: Settings, client: httpx.AsyncClient | None = None) -> EgressResult:
     expected = settings.expected_egress_ip.strip()
+    if not expected:
+        return egress_disabled_result()
     owns_client = client is None
     if owns_client:
         client = httpx.AsyncClient(timeout=30.0)
@@ -138,6 +153,10 @@ async def verify_egress_on_startup(
     delay: float = 5.0,
 ) -> EgressResult:
     import asyncio
+
+    if not settings.expected_egress_ip.strip():
+        logger.info("EXPECTED_EGRESS_IP not set; egress check disabled")
+        return egress_disabled_result()
 
     last: EgressResult | None = None
     owns_client = client is None
