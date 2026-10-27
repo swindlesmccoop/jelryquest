@@ -25,6 +25,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+# Addon URLs contain credentials; httpx logs full request URLs at INFO.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -35,7 +37,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         cfg = settings or get_settings()
         http = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=30.0), follow_redirects=True
+            timeout=httpx.Timeout(60.0, connect=30.0),
+            follow_redirects=True,
+            headers={"User-Agent": cfg.http_user_agent},
         )
         cdn = CdnPreference(cfg.real_debrid_preferred_cdn)
         rd = RealDebridClient(cfg, http, cdn)

@@ -44,6 +44,7 @@ Pre-built images are published to `ghcr.io/swindlesmccoop/jelryquest`.
 |----------|---------|-------------|
 | `STREMIO_ADDON_MANIFEST_URL` | required | Torrentio manifest URL (contains RD token) |
 | `REAL_DEBRID_API_TOKEN` | from manifest | Explicit RD API token |
+| `HTTP_USER_AGENT` | Firefox UA | Shared HTTP client User-Agent (Torrentio blocks the default httpx UA) |
 | `DOWNLOAD_DIR_MOVIES` / `DOWNLOAD_DIR_SERIES` | `/downloads` | In-container output folders (compose mounts `DOWNLOAD_PATH_MOVIES` / `DOWNLOAD_PATH_SERIES` here) |
 | `MAX_ACTIVE_DOWNLOADS` | `1` | Concurrent file pulls |
 | `WEB_PORT` | `8080` | Listener port |

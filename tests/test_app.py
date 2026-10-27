@@ -1,9 +1,12 @@
 import asyncio
+import logging
 
 import httpx
 import pytest
 
-from backend.config import Settings
+from backend.cdn_scan import probe_host
+from backend.config import DEFAULT_HTTP_USER_AGENT, Settings
+from backend.main import create_app
 from backend.downloads import (
     DownloadManager,
     DownloadSource,
@@ -42,6 +45,48 @@ def test_settings(tmp_path):
     assert s.download_path_for("movie") == str(tmp_path)
     assert s.download_path_for("series") == str(tmp_path / "tv")
     assert make_settings(tmp_path, real_debrid_api_token="X").rd_token == "X"
+
+
+@pytest.mark.parametrize("user_agent", [DEFAULT_HTTP_USER_AGENT, "CustomBrowser/1.0"])
+async def test_shared_http_headers(tmp_path, monkeypatch, caplog, user_agent):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if "speedtest" in request.url.path:
+            return httpx.Response(200, content=b"test")
+        if "/stream/" in request.url.path:
+            return httpx.Response(200, json=stream_payload())
+        return httpx.Response(200, json={"metas": []})
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "backend.main.httpx.AsyncClient",
+        lambda **kwargs: async_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    settings = make_settings(tmp_path, real_debrid_auto_scan=False)
+    assert settings.http_user_agent == DEFAULT_HTTP_USER_AGENT
+    if user_agent != DEFAULT_HTTP_USER_AGENT:
+        monkeypatch.setenv("HTTP_USER_AGENT", user_agent)
+        settings = make_settings(tmp_path, real_debrid_auto_scan=False)
+    app = create_app(settings)
+    # Root INFO logging must not expose the credential-bearing addon URL.
+    with caplog.at_level(logging.INFO):
+        async with app.router.lifespan_context(app):
+            stremio = app.state.stremio
+            assert stremio.client.headers["User-Agent"] == user_agent
+            await stremio.get_streams("tt0118617")
+            await stremio.search("Movie")
+            await app.state.downloads.rd._request("GET", "/user")
+            await probe_host(stremio.client, "cdn.example.com", 0.01, 1)
+
+    assert [r.headers["User-Agent"] for r in requests] == [
+        user_agent, user_agent, user_agent, "jelryquest-rd-cdn-speedtest/1.0"
+    ]
+    assert requests[2].headers["Authorization"] == "Bearer TOK123"
+    assert "Authorization" not in requests[0].headers
+    assert "TOK123" not in caplog.text
+    assert not any(r.name == "httpx" for r in caplog.records)
 
 
 def test_rd_urls():

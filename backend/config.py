@@ -5,6 +5,9 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _RD_TOKEN_RE = re.compile(r"realdebrid=([^/&]+)", re.IGNORECASE)
+DEFAULT_HTTP_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
+)
 
 
 class Settings(BaseSettings):
@@ -12,6 +15,7 @@ class Settings(BaseSettings):
 
     stremio_addon_manifest_url: str
     cinemeta_base: str = "https://v3-cinemeta.strem.io"
+    http_user_agent: str = DEFAULT_HTTP_USER_AGENT
 
     real_debrid_api_token: str | None = None
     real_debrid_api_base: str = "https://api.real-debrid.com/rest/1.0"
