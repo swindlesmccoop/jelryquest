@@ -196,6 +196,7 @@ async function startDownload(streamIndex) {
   }
   try {
     await postJson("/api/download", body);
+    resetBrowser();
     await refreshDownloads();
   } catch (e) {
     alert(e.message);
