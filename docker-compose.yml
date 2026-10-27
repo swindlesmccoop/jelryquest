@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    volumes:
+      - ${DOWNLOAD_PATH_MOVIES:-./downloads/movies}:/downloads/movies
+      - ${DOWNLOAD_PATH_SERIES:-./downloads/series}:/downloads/series
+      - jelryquest-cache:/cache
+    env_file: .env
+    environment:
+      CACHE_DIR: /cache
+      DOWNLOAD_DIR: /downloads/movies
+      DOWNLOAD_DIR_MOVIES: /downloads/movies
+      DOWNLOAD_DIR_SERIES: /downloads/series
+    restart: unless-stopped
+
+volumes:
+  jelryquest-cache:
