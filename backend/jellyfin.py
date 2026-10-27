@@ -17,7 +17,9 @@ class JellyfinClient:
     async def refresh_library(self) -> None:
         response = await self.client.post(
             f"{self.settings.jellyfin_url.strip().rstrip('/')}/Library/Refresh",
-            headers={"X-MediaBrowser-Token": self.settings.jellyfin_api_key.strip()},
+            headers={
+                "Authorization": f'MediaBrowser Token="{self.settings.jellyfin_api_key.strip()}"'
+            },
             # Keep the API key on the configured server, even if it redirects.
             follow_redirects=False,
         )

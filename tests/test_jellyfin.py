@@ -7,10 +7,11 @@ from backend.main import create_app
 
 @pytest.mark.parametrize(
     "upstream_status, expected_status, detail",
-    [(204, 200, None), (401, 502, "denied access"), (403, 502, "denied access"),
+    [(204, 200, None), (401, 502, "key was rejected or the authentication header format is unsupported"),
+     (403, 502, "lacks administrator rights"),
      (500, 502, "HTTP 500"), (302, 502, "HTTP 302"), (None, 502, "Could not reach")],
 )
-async def test_jellyfin_refresh(tmp_path, monkeypatch, upstream_status, expected_status, detail):
+async def test_jellyfin_refresh(tmp_path, monkeypatch, caplog, upstream_status, expected_status, detail):
     requests = []
 
     def handler(request):
@@ -44,12 +45,13 @@ async def test_jellyfin_refresh(tmp_path, monkeypatch, upstream_status, expected
             assert "SECRET" not in response.text
             assert "private connection detail" not in response.text
             # The server credential must not become a shared client header.
-            assert "X-MediaBrowser-Token" not in app.state.stremio.client.headers
+            assert "Authorization" not in app.state.stremio.client.headers
     assert len(requests) == 1  # Redirects must never forward the API key.
     assert requests[0].method == "POST"
     assert str(requests[0].url) == "https://jellyfin.example/jellyfin/Library/Refresh"
-    assert requests[0].headers["X-MediaBrowser-Token"] == "SECRET"
-    assert "Authorization" not in requests[0].headers
+    assert requests[0].headers["Authorization"] == 'MediaBrowser Token="SECRET"'
+    assert "api_key" not in requests[0].url.params
+    assert "SECRET" not in caplog.text
 
 
 @pytest.mark.parametrize("url, key", [("", ""), ("https://jellyfin.example", ""), ("", "SECRET")])

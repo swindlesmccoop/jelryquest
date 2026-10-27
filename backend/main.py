@@ -86,8 +86,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             await jellyfin.refresh_library()
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code in (401, 403):
-                detail = "Jellyfin denied access. Check JELLYFIN_API_KEY has administrator access."
+            if exc.response.status_code == 401:
+                detail = (
+                    "Jellyfin rejected authentication (HTTP 401). Check JELLYFIN_API_KEY; "
+                    "the key was rejected or the authentication header format is unsupported."
+                )
+            elif exc.response.status_code == 403:
+                detail = "Jellyfin denied access (HTTP 403). JELLYFIN_API_KEY lacks administrator rights."
             else:
                 detail = f"Jellyfin library refresh failed (HTTP {exc.response.status_code})."
             raise HTTPException(502, detail) from exc
