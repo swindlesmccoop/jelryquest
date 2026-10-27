@@ -45,6 +45,8 @@ Pre-built images are published to `ghcr.io/swindlesmccoop/jelryquest`.
 | `STREMIO_ADDON_MANIFEST_URL` | required | Torrentio manifest URL (contains RD token) |
 | `REAL_DEBRID_API_TOKEN` | from manifest | Explicit RD API token |
 | `HTTP_USER_AGENT` | Firefox UA | Shared HTTP client User-Agent (Torrentio blocks the default httpx UA) |
+| `JELLYFIN_URL` | unset | Jellyfin URL reachable from the app container, including any base path |
+| `JELLYFIN_API_KEY` | unset | Server API key for the library refresh button |
 | `DOWNLOAD_DIR_MOVIES` / `DOWNLOAD_DIR_SERIES` | `/downloads` | In-container output folders (compose mounts `DOWNLOAD_PATH_MOVIES` / `DOWNLOAD_PATH_SERIES` here) |
 | `MAX_ACTIVE_DOWNLOADS` | `1` | Concurrent file pulls |
 | `WEB_PORT` | `8080` | Listener port |
@@ -56,9 +58,16 @@ Pre-built images are published to `ghcr.io/swindlesmccoop/jelryquest`.
 
 ## API
 
+To enable **Refresh Jellyfin library**, create an API key in Jellyfin's admin
+Dashboard → API Keys, set `JELLYFIN_URL` and `JELLYFIN_API_KEY` in `.env`, and
+recreate the app container. The key stays on the backend. The button requests
+a scan for new and updated files; it does not wait for the scan to finish.
+Anyone with access to JelryQuest can use this button once configured.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Status and CDN scan state |
+| POST | `/api/jellyfin/refresh` | Request Jellyfin library scan (requires server configuration) |
 | GET | `/api/search?q=&type=movie\|series` | Cinemeta search |
 | GET | `/api/movie/{imdbId}/meta` | Movie metadata |
 | GET | `/api/movie/{imdbId}/streams` | Movie streams |

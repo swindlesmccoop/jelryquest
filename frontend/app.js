@@ -211,6 +211,8 @@ function goBack() {
 // --- CDN status -----------------------------------------------------------
 
 let cdnPoll = null;
+let jellyfinConfigured = false;
+let jellyfinRefreshing = false;
 
 function cdnText(scan) {
   if (!scan) return null;
@@ -238,13 +240,40 @@ async function refreshCdnStatus() {
   const el = $("cdn-status");
   let scan = null;
   try {
-    scan = (await api("/api/health")).rd_cdn_scan;
+    const health = await api("/api/health");
+    scan = health.rd_cdn_scan;
+    jellyfinConfigured = health.jellyfin_configured === true;
+    $("jellyfin-refresh").disabled = !jellyfinConfigured || jellyfinRefreshing;
+    $("jellyfin-refresh").title = jellyfinConfigured
+      ? "Scan Jellyfin for new and updated files"
+      : "Set JELLYFIN_URL and JELLYFIN_API_KEY on the server to enable refresh";
   } catch (_) {}
   const [text, cls] = cdnText(scan) ?? ["", ""];
   el.textContent = text;
   el.className = `status ${cls}`;
   clearTimeout(cdnPoll);
   if (scan?.state === "scanning") cdnPoll = setTimeout(refreshCdnStatus, 3500);
+}
+
+async function refreshJellyfin() {
+  if (!jellyfinConfigured || jellyfinRefreshing) return;
+  jellyfinRefreshing = true;
+  const button = $("jellyfin-refresh");
+  const status = $("jellyfin-status");
+  button.disabled = true;
+  status.className = "status";
+  status.textContent = "Requesting Jellyfin library scan…";
+  try {
+    await api("/api/jellyfin/refresh", { method: "POST" });
+    status.textContent = "Jellyfin library scan requested. New files will appear after the scan finishes.";
+    status.className = "status ok";
+  } catch (e) {
+    status.textContent = e.message;
+    status.className = "status bad";
+  } finally {
+    jellyfinRefreshing = false;
+    button.disabled = !jellyfinConfigured;
+  }
 }
 
 // --- Downloads ------------------------------------------------------------
@@ -316,6 +345,7 @@ document.querySelectorAll(".mode-btn").forEach((btn) =>
   btn.addEventListener("click", () => setMode(btn.dataset.mode))
 );
 $("back-btn").addEventListener("click", goBack);
+$("jellyfin-refresh").addEventListener("click", refreshJellyfin);
 
 refreshCdnStatus();
 refreshDownloads();

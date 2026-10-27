@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     cinemeta_base: str = "https://v3-cinemeta.strem.io"
     http_user_agent: str = DEFAULT_HTTP_USER_AGENT
 
+    jellyfin_url: str = ""
+    jellyfin_api_key: str = ""
+
     real_debrid_api_token: str | None = None
     real_debrid_api_base: str = "https://api.real-debrid.com/rest/1.0"
     real_debrid_remote: bool = False

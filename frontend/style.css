@@ -72,6 +72,14 @@ h2 {
   color: var(--accent);
 }
 
+.library-refresh {
+  margin-top: 0.75rem;
+}
+
+.library-refresh .status {
+  margin-top: 0.35rem;
+}
+
 /* Controls */
 
 input[type="text"],

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.cdn_scan import CdnScanner
 from backend.config import Settings, get_settings
 from backend.downloads import DownloadManager, DownloadSource
+from backend.jellyfin import JellyfinClient
 from backend.links import parse_pasted_link
 from backend.models import (
     DownloadRequest,
@@ -46,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scanner = CdnScanner(cfg, http, cdn)
         app.state.settings = cfg
         app.state.stremio = StremioClient(cfg, http)
+        app.state.jellyfin = JellyfinClient(cfg, http)
         app.state.downloads = DownloadManager(cfg, http, rd)
         app.state.scanner = scanner
         scanner.start()
@@ -70,7 +72,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/health")
     async def health(request: Request) -> dict:
-        return {"status": "ok", "rd_cdn_scan": request.app.state.scanner.status()}
+        return {
+            "status": "ok",
+            "rd_cdn_scan": request.app.state.scanner.status(),
+            "jellyfin_configured": request.app.state.jellyfin.configured,
+        }
+
+    @app.post("/api/jellyfin/refresh")
+    async def refresh_jellyfin(request: Request) -> dict:
+        jellyfin = request.app.state.jellyfin
+        if not jellyfin.configured:
+            raise HTTPException(503, "Set JELLYFIN_URL and JELLYFIN_API_KEY to enable library refresh.")
+        try:
+            await jellyfin.refresh_library()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (401, 403):
+                detail = "Jellyfin denied access. Check JELLYFIN_API_KEY has administrator access."
+            else:
+                detail = f"Jellyfin library refresh failed (HTTP {exc.response.status_code})."
+            raise HTTPException(502, detail) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, "Could not reach Jellyfin. Check JELLYFIN_URL and server availability.") from exc
+        return {"status": "accepted"}
 
     @app.get("/api/search", response_model=list[SearchResult])
     async def search(
