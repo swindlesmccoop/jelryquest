@@ -61,13 +61,17 @@ Pre-built images are published to `ghcr.io/swindlesmccoop/jelryquest`.
 To enable **Refresh Jellyfin library**, create an API key in Jellyfin's admin
 Dashboard → API Keys, set `JELLYFIN_URL` and `JELLYFIN_API_KEY` in `.env`, and
 recreate the app container. The key stays on the backend. The button requests
-a scan for new and updated files; it does not wait for the scan to finish.
+a scan for new and updated files and displays progress from Jellyfin's scheduled
+tasks. It checks for existing scans on page load and avoids restarting a running
+scan. Progress updates every two seconds, pauses while the tab is hidden, and
+stops after 30 minutes. A scan continues on Jellyfin when monitoring stops.
 Anyone with access to JelryQuest can use this button once configured.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Status and CDN scan state |
 | POST | `/api/jellyfin/refresh` | Request Jellyfin library scan (requires server configuration) |
+| GET | `/api/jellyfin/status` | Scan configuration, state, and progress percentage |
 | GET | `/api/search?q=&type=movie\|series` | Cinemeta search |
 | GET | `/api/movie/{imdbId}/meta` | Movie metadata |
 | GET | `/api/movie/{imdbId}/streams` | Movie streams |

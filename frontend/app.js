@@ -213,6 +213,69 @@ function goBack() {
 let cdnPoll = null;
 let jellyfinConfigured = false;
 let jellyfinRefreshing = false;
+let jellyfinState = "unknown";
+let jellyfinPoll = null;
+let jellyfinDeadline = Date.now() + 30 * 60 * 1000;
+let jellyfinStartedAt = null;
+let jellyfinSeenActive = false;
+
+function updateJellyfinButton() {
+  $("jellyfin-refresh").disabled = !jellyfinConfigured || jellyfinRefreshing ||
+    ["Running", "Cancelling", "starting"].includes(jellyfinState);
+}
+
+function scheduleJellyfinPoll() {
+  clearTimeout(jellyfinPoll);
+  if (document.hidden) return;
+  if (Date.now() >= jellyfinDeadline) {
+    $("jellyfin-status").textContent = "Progress monitoring stopped after 30 minutes. Check Jellyfin for scan status.";
+    return;
+  }
+  jellyfinPoll = setTimeout(pollJellyfinStatus, 2000);
+}
+
+function displayJellyfinStatus(scan) {
+  jellyfinConfigured = scan.configured === true;
+  jellyfinState = scan.state;
+  const status = $("jellyfin-status");
+  status.className = "status";
+  if (scan.state === "Running") {
+    jellyfinSeenActive = true;
+    const progress = typeof scan.progress === "number" ? ` ${scan.progress.toFixed(1)}%` : "";
+    status.textContent = `Scanning Jellyfin…${progress}`;
+  } else if (scan.state === "Cancelling") {
+    jellyfinSeenActive = true;
+    status.textContent = "Jellyfin scan is cancelling…";
+  } else if (scan.state === "Idle" && jellyfinSeenActive) {
+    status.textContent = "Jellyfin scan complete.";
+    status.className = "status ok";
+    jellyfinStartedAt = null;
+    jellyfinSeenActive = false;
+  } else if (jellyfinStartedAt && Date.now() - jellyfinStartedAt < 15000) {
+    jellyfinState = "starting";
+    status.textContent = "Waiting for Jellyfin scan to start…";
+  } else {
+    jellyfinStartedAt = null;
+    status.textContent = !jellyfinConfigured ? "Configure Jellyfin on the server to enable library scans." :
+      scan.state === "Idle" ? "Jellyfin is idle." : "Jellyfin scan status is unknown.";
+  }
+  updateJellyfinButton();
+  if (["Running", "Cancelling", "starting"].includes(jellyfinState)) scheduleJellyfinPoll();
+}
+
+async function pollJellyfinStatus() {
+  clearTimeout(jellyfinPoll);
+  if (document.hidden) return;
+  try {
+    const scan = await api("/api/jellyfin/status");
+    if (!document.hidden) displayJellyfinStatus(scan);
+  } catch (e) {
+    $("jellyfin-status").textContent = e.message;
+    $("jellyfin-status").className = "status bad";
+    updateJellyfinButton();
+    if (["Running", "Cancelling", "starting"].includes(jellyfinState)) scheduleJellyfinPoll();
+  }
+}
 
 function cdnText(scan) {
   if (!scan) return null;
@@ -243,7 +306,7 @@ async function refreshCdnStatus() {
     const health = await api("/api/health");
     scan = health.rd_cdn_scan;
     jellyfinConfigured = health.jellyfin_configured === true;
-    $("jellyfin-refresh").disabled = !jellyfinConfigured || jellyfinRefreshing;
+    updateJellyfinButton();
     $("jellyfin-refresh").title = jellyfinConfigured
       ? "Scan Jellyfin for new and updated files"
       : "Set JELLYFIN_URL and JELLYFIN_API_KEY on the server to enable refresh";
@@ -256,7 +319,7 @@ async function refreshCdnStatus() {
 }
 
 async function refreshJellyfin() {
-  if (!jellyfinConfigured || jellyfinRefreshing) return;
+  if (!jellyfinConfigured || jellyfinRefreshing || ["Running", "Cancelling", "starting"].includes(jellyfinState)) return;
   jellyfinRefreshing = true;
   const button = $("jellyfin-refresh");
   const status = $("jellyfin-status");
@@ -264,15 +327,17 @@ async function refreshJellyfin() {
   status.className = "status";
   status.textContent = "Requesting Jellyfin library scan…";
   try {
-    await api("/api/jellyfin/refresh", { method: "POST" });
-    status.textContent = "Jellyfin library scan requested. New files will appear after the scan finishes.";
-    status.className = "status ok";
+    const scan = await api("/api/jellyfin/refresh", { method: "POST" });
+    jellyfinDeadline = Date.now() + 30 * 60 * 1000;
+    jellyfinStartedAt = Date.now();
+    jellyfinSeenActive = false;
+    displayJellyfinStatus(scan);
   } catch (e) {
     status.textContent = e.message;
     status.className = "status bad";
   } finally {
     jellyfinRefreshing = false;
-    button.disabled = !jellyfinConfigured;
+    updateJellyfinButton();
   }
 }
 
@@ -347,6 +412,11 @@ document.querySelectorAll(".mode-btn").forEach((btn) =>
 $("back-btn").addEventListener("click", goBack);
 $("jellyfin-refresh").addEventListener("click", refreshJellyfin);
 
+document.addEventListener("visibilitychange", () => {
+  clearTimeout(jellyfinPoll);
+  if (!document.hidden && Date.now() < jellyfinDeadline) pollJellyfinStatus();
+});
 refreshCdnStatus();
+pollJellyfinStatus();
 refreshDownloads();
 setInterval(refreshDownloads, 2000);

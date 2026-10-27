@@ -84,7 +84,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not jellyfin.configured:
             raise HTTPException(503, "Set JELLYFIN_URL and JELLYFIN_API_KEY to enable library refresh.")
         try:
-            await jellyfin.refresh_library()
+            async with jellyfin.refresh_lock:
+                try:
+                    status = await jellyfin.scan_status()
+                except (httpx.HTTPError, ValueError):
+                    status = {"state": "unknown", "progress": None}
+                if status["state"] in ("Running", "Cancelling"):
+                    return {"configured": True, "already_running": True, **status}
+                await jellyfin.refresh_library()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 401:
                 detail = (
@@ -98,7 +105,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(502, detail) from exc
         except httpx.HTTPError as exc:
             raise HTTPException(502, "Could not reach Jellyfin. Check JELLYFIN_URL and server availability.") from exc
-        return {"status": "accepted"}
+        return {"status": "accepted", "configured": True, "state": "starting", "progress": None}
+
+    @app.get("/api/jellyfin/status")
+    async def jellyfin_status(request: Request) -> dict:
+        jellyfin = request.app.state.jellyfin
+        if not jellyfin.configured:
+            return {"configured": False, "state": "unknown", "progress": None}
+        try:
+            return {"configured": True, **await jellyfin.scan_status()}
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            if code == 401:
+                detail = "Jellyfin rejected authentication (HTTP 401). Check JELLYFIN_API_KEY."
+            elif code == 403:
+                detail = "Jellyfin denied access (HTTP 403). JELLYFIN_API_KEY lacks administrator rights."
+            else:
+                detail = f"Jellyfin status unavailable (HTTP {code})."
+            raise HTTPException(502, detail) from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(502, "Jellyfin status unavailable. Check the server connection.") from exc
 
     @app.get("/api/search", response_model=list[SearchResult])
     async def search(
